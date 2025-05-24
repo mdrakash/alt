@@ -13,7 +13,20 @@ return new class extends Migration
     {
         Schema::create('services', function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
+            $table->string('customer_name');
+            $table->string('phone');
+            $table->string('chassis_number');
+            $table->string('km_run');
+            $table->string('bay_number');
+            $table->float('charge');
+            $table->string('type');
+            $table->string('img_url');
+            $table->tinyInteger('status')->comment('process,complete')->default(1);
+            $table->float('parts_price')->nullable();
+            $table->float('total_amount')->nullable();
+            $table->timestamp('start_time');
+            $table->timestamp('end_time')->nullable();
+            $table->timestamp('service_time')->nullable();
         });
     }
 
