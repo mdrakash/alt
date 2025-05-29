@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ServiceStoreRequest;
 use App\Models\Parts;
 use App\Models\Services;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class ServiceController extends Controller
 {
@@ -14,8 +17,9 @@ class ServiceController extends Controller
      */
     public function index()
     {
-        $services = Services::with('serviceParts.parts')->get();
-        return view('service.index', compact('services'));
+        $services = Services::with('serviceParts.parts')->orderByDesc('id')->simplePaginate(10);
+        $partses = $this->getParts();
+        return view('service.index', compact('services', 'partses'));
     }
 
     /**
@@ -23,37 +27,33 @@ class ServiceController extends Controller
      */
     public function create()
     {
-        $partses = Parts::all();
+        $partses = $this->getParts();
         return view('service.create', compact('partses'));
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(ServiceStoreRequest $request)
     {
-        $request->validate([
-            'customer_name' => 'required',
-            'chassis_number' => 'required',
-            'km_run' => 'required|numeric',
-            'bay_number' => 'required',
-            'charge' => 'required|numeric',
-            'type' => 'required',
-            'start_time' => 'required',
-            'parts' => 'nullable|array',
-            'phone' => 'required',
-            'img' => 'required|file',
-        ]);
+        DB::beginTransaction();
+        try {
+            $data = $request->except(['parts', 'img']);
 
-        $img_url = $request->file('img')->store('services');
-        
-        $data = $request->except(['parts', 'img']);
-        $data['img_url'] = $img_url;
-        $data['start_time'] = Carbon::parse($data['start_time'])->format('Y-m-d H:i:s');
+            if ($request->hasFile('img')) {
+                $img_url = $request->file('img')->store('services');
+                $data['img_url'] = $img_url;
+            }
 
-        $service = Services::create($data);
-        $service->serviceParts()->createMany($request->parts);
-        return response()->json(['message' => 'success'], 201);
+            $service = Services::create($data);
+            $service->serviceParts()->createMany($request->parts);
+
+            DB::commit();
+            return response()->json(['message' => 'Service created successfully'], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Error creating service', 'error' => $e->getMessage()], 500);
+        }
     }
 
     /**
@@ -77,9 +77,29 @@ class ServiceController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $service = Services::findOrFail($id);
-        $service->update($request->all());
-        return true;
+        DB::beginTransaction();
+        try {
+            $service = Services::findOrFail($id);
+
+            foreach ($request->partses as $parts) {
+                $service->serviceParts()->updateOrCreate(
+                    [
+                        'services_id' => $parts['services_id'],
+                        'parts_id' => $parts['parts_id'],
+                        'quantity' => $parts['quantity'],
+                    ],
+                    $parts
+                );
+            }
+
+            $service->update($request->except('partses'));
+
+            DB::commit();
+            return response()->json(['message' => 'Service updated successfully'], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Error updating service', 'error' => $e->getMessage()], 500);
+        }
     }
 
     /**
@@ -88,5 +108,14 @@ class ServiceController extends Controller
     public function destroy(string $id)
     {
         //
+    }
+
+    private function getParts()
+    {
+        $parts = Cache::rememberForever('all_parts', function () {
+            return Parts::all();
+        });
+
+        return $parts;
     }
 }

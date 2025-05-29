@@ -7,38 +7,38 @@
                         <div class="row">
                             <div class="col-6">
                                 <label for="cutomer_name" class="form-label">Cutomer Name</label>
-                                <input type="text" v-model="service.customer_name" name="cutomer_name" class="form-control" id="cutomer_name" placeholder="Customer Name">
+                                <input type="text" v-model="service.customer_name" name="cutomer_name" class="form-control" :class="{ 'is-invalid': errors.customer_name }" id="cutomer_name" placeholder="Customer Name">
                             </div>
                             <div class="col-6">
                                 <label for="phone" class="form-label">Phone</label>
-                                <input type="text" v-model="service.phone" name="phone" class="form-control" id="phone" placeholder="Phone">
+                                <input type="text" v-model="service.phone" name="phone" class="form-control" :class="{ 'is-invalid': errors.phone }" id="phone" placeholder="Phone">
                             </div>
                         </div>
                         <div class="row">
                             <div class="col-4">
                                 <label for="chassis_number" class="form-label">Chassis Number</label>
-                                <input type="text" v-model="service.chassis_number" name="chassis_number" class="form-control" id="chassis_number" placeholder="Chassis Number">
+                                <input type="text" v-model="service.chassis_number" name="chassis_number" class="form-control" :class="{ 'is-invalid': errors.chassis_number }" id="chassis_number" placeholder="Chassis Number">
                             </div>
                             <div class="col-4">
                                 <label for="km_run" class="form-label">KM Run</label>
-                                <input type="number" v-model="service.km_run" name="km_run" class="form-control" id="km_run" placeholder="KM Run">
+                                <input type="number" v-model="service.km_run" name="km_run" class="form-control" :class="{ 'is-invalid': errors.km_run }" id="km_run" placeholder="KM Run">
                             </div>
                             <div class="col-4">
                                 <label for="bay_number" class="form-label">Bay Number</label>
-                                <input type="text" v-model="service.bay_number" name="bay_number" class="form-control" id="bay_number" placeholder="Bay Number">
+                                <input type="text" v-model="service.bay_number" name="bay_number" class="form-control" :class="{ 'is-invalid': errors.bay_number }" id="bay_number" placeholder="Bay Number">
                             </div>
                         </div>
                         <div class="row">
                             <div class="col-4">
                                 <label for="charge" class="form-label">Charge</label>
-                                <input type="number" v-model="service.charge" name="charge" class="form-control" id="charge" placeholder="Charge">
+                                <input type="number" v-model="service.charge" name="charge" class="form-control" :class="{ 'is-invalid': errors.charge }" id="charge" placeholder="Charge">
                             </div>
                             <div class="col-4">
                                 <label for="type" class="form-label">Charge</label>
-                                <select v-model="service.type" name="type" class="form-select" id="type" aria-label="Service Type">
+                                <select v-model="service.type" name="type" class="form-select" :class="{ 'is-invalid': errors.type }" id="type" aria-label="Service Type">
                                     <option value="1">Free</option>
                                     <option value="2">Paid</option>
-                                  </select>
+                                </select>
                             </div>
                             <div class="col-4">
                                 <label for="start_time" class="form-label">Service Time</label>
@@ -54,32 +54,13 @@
                         </div>
                         <div class="row">
                             <div class="col">
-                                <div class="card mt-2">
-                                    <div class="card-body">
-                                        <div v-for="(item, index) in service.parts" :key="index" class="row">
-                                            <div class="col-8">
-                                                <label class="form-label">Select Parts</label>
-                                                <select v-model="service.parts[index].parts_id" class="form-select">
-                                                    <option v-for="(parts, index) in partses" :key="index" :value="parts.id">{{parts.name}}</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-4">
-                                                <label class="form-label">Quantity</label>
-                                                <input type="number" v-model="service.parts[index].quantity" class="form-control" placeholder="Quantity">
-                                            </div>
-                                        </div>
-                                        <div class="col">
-                                            <div class="d-flex justify-content-end">
-                                                <button type="button" @click.prevent="addParts" class="btn btn-primary mt-2">Add Parts</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                <PartsComponent :services="service.parts" :partses="partses" @addParts="addParts"/>
                             </div>
                         </div>
                         <div class="row">
                             <div class="col">
-                                <button type="button" @click.prevent="submit" class="btn btn-primary mt-2">Submit</button>
+                                <button type="button" @click.prevent="submit" class="btn btn-primary mt-2" :disabled="isLoading">Submit</button>
+                                <a href="/services" class="btn btn-success mt-2 ms-2">Back</a>
                             </div>
                         </div>
                     </div>
@@ -90,11 +71,19 @@
 </template>
 
 <script setup>
-    import axios from 'axios';
     import {ref} from 'vue';
+    import axios from 'axios';
+
     import VueDatePicker from '@vuepic/vue-datepicker';
+    import { toast } from 'vue3-toastify';
+
+    import PartsComponent from './PartsComponent.vue';
+
     import '@vuepic/vue-datepicker/dist/main.css'
+    import 'vue3-toastify/dist/index.css';
+
     const props = defineProps(['partses']);
+    const errors = ref({});
     const service = ref({
         customer_name: null,
         chassis_number: null,
@@ -102,12 +91,13 @@
         bay_number: null,
         charge: null,
         type: 1,
-        start_time: null,
+        start_time: new Date(),
         img: null,
         parts:[
             {parts_id: '', quantity: 1}
         ]
     });
+    const isLoading = ref(false);
 
     const handleImage = (e) => {
         service.value.img = e.target.files[0];
@@ -119,18 +109,27 @@
 
     const submit = async () => {
         try {
-            const response = await axios.post('/services', service.value,{
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
+            setLoading(true);
+            const response = await axios.post('/services', service.value, {
+                headers: { 'Content-Type': 'multipart/form-data' }
             });
-            if(response.status == 201) {
-                // window.location.href = 'services/'
+
+            if (response.status === 201) {
+                toast.success(response.data.message || 'Service Created Successfully');
+                window.location.href = '/services/';
             }
         } catch (error) {
-            console.log(error);
+            if (error.response) {
+                errors.value = error.response.data.errors || {};
+                toast.error(error.response.data.message || 'Something went wrong');
+            } else {
+                toast.error(error.message || 'Unexpected error occurred');
+            }
+        } finally {
+            setLoading(false);
         }
     }
 
+    const setLoading = (val) => isLoading.value = val;
 
 </script>

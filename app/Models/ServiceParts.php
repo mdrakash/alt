@@ -6,7 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class ServiceParts extends Model
 {
-    protected $guarded = [];
+    protected $fillable = [
+        'services_id',
+        'parts_id',
+        'quantity'
+    ];
 
     public $timestamps = false;
 
